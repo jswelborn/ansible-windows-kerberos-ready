@@ -4,10 +4,40 @@
   gather_facts: false
 
   tasks:
-    - name: Wait for Kerberos WinRM to become ready
+    - name: Wait for first Kerberos WinRM connection
       ansible.windows.win_shell: hostname
-      register: kerberos_ready
+      register: kerberos_ready_1
       retries: 30
       delay: 10
-      until: kerberos_ready is succeeded
+      until: kerberos_ready_1 is succeeded
+      changed_when: false
+
+    - name: Reset Kerberos connection
+      ansible.builtin.meta: reset_connection
+
+    - name: Wait before second Kerberos validation
+      ansible.builtin.pause:
+        seconds: 15
+
+    - name: Validate second Kerberos WinRM connection
+      ansible.windows.win_shell: hostname
+      register: kerberos_ready_2
+      retries: 12
+      delay: 10
+      until: kerberos_ready_2 is succeeded
+      changed_when: false
+
+    - name: Reset Kerberos connection again
+      ansible.builtin.meta: reset_connection
+
+    - name: Wait before final Kerberos validation
+      ansible.builtin.pause:
+        seconds: 15
+
+    - name: Validate final Kerberos WinRM connection
+      ansible.windows.win_shell: hostname
+      register: kerberos_ready_3
+      retries: 12
+      delay: 10
+      until: kerberos_ready_3 is succeeded
       changed_when: false
