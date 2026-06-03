@@ -1,0 +1,13 @@
+---
+- name: Wait for Windows Kerberos readiness
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Wait for Kerberos WinRM to become ready
+      ansible.windows.win_shell: hostname
+      register: kerberos_ready
+      retries: 30
+      delay: 10
+      until: kerberos_ready is succeeded
+      changed_when: false
