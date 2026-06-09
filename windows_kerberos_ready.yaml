@@ -4,31 +4,37 @@
   gather_facts: false
 
   tasks:
+    - name: Set Kerberos password variable from available credential vars
+      ansible.builtin.set_fact:
+        kerberos_password: "{{ ansible_password | default(ansible_ssh_pass | default('')) }}"
+
     - name: Validate Kerberos variables
       ansible.builtin.assert:
         that:
           - ansible_user is defined
           - ansible_user | length > 0
-          - ansible_password is defined
-          - ansible_password | length > 0
+          - kerberos_password is defined
+          - kerberos_password | length > 0
           - ansible_winrm_transport is defined
           - ansible_winrm_transport == "kerberos"
-        fail_msg: Missing ansible_user, ansible_password, or Kerberos transport
+        fail_msg: Missing ansible_user, password, or Kerberos transport
 
-    - name: Show Kerberos non-secret variables
+    - name: Show Kerberos variables for testing
       ansible.builtin.debug:
         msg:
           ansible_user: "{{ ansible_user }}"
           ansible_host: "{{ ansible_host }}"
           ansible_winrm_transport: "{{ ansible_winrm_transport }}"
+          ansible_password_defined: "{{ ansible_password is defined }}"
+          ansible_ssh_pass_defined: "{{ ansible_ssh_pass is defined }}"
+          kerberos_password: "{{ kerberos_password }}"
 
     - name: Validate kinit with injected AAP credential
       ansible.builtin.expect:
         command: /usr/bin/kinit -V "{{ ansible_user }}"
         responses:
-          (?i)password.*: "{{ ansible_password }}"
+          (?i)password.*: "{{ kerberos_password }}"
         timeout: 60
-      no_log: true
       changed_when: false
 
     - name: Show Kerberos ticket
