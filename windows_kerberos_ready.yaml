@@ -30,11 +30,8 @@
           ansible_ssh_pass_defined: "{{ ansible_ssh_pass is defined }}"
 
     - name: Validate kinit with injected AAP credential
-      ansible.builtin.expect:
-        command: /usr/bin/kinit -V "{{ ansible_user }}"
-        responses:
-          (?i)password.*: "{{ kerberos_password }}"
-        timeout: 60
+      ansible.builtin.shell: |
+        printf '%s\n' "{{ kerberos_password }}" | /usr/bin/kinit -V "{{ ansible_user }}"
       delegate_to: localhost
       changed_when: false
 
