@@ -19,15 +19,15 @@
           - ansible_winrm_transport == "kerberos"
         fail_msg: Missing ansible_user, password, or Kerberos transport
 
-    - name: Show Kerberos variables for testing
+    - name: Show Kerberos non-secret variables
       ansible.builtin.debug:
         msg:
           ansible_user: "{{ ansible_user }}"
           ansible_host: "{{ ansible_host }}"
+          ansible_connection: "{{ ansible_connection | default('undefined') }}"
           ansible_winrm_transport: "{{ ansible_winrm_transport }}"
           ansible_password_defined: "{{ ansible_password is defined }}"
           ansible_ssh_pass_defined: "{{ ansible_ssh_pass is defined }}"
-          kerberos_password: "{{ kerberos_password }}"
 
     - name: Validate kinit with injected AAP credential
       ansible.builtin.expect:
@@ -35,10 +35,12 @@
         responses:
           (?i)password.*: "{{ kerberos_password }}"
         timeout: 60
+      delegate_to: localhost
       changed_when: false
 
     - name: Show Kerberos ticket
       ansible.builtin.command: /usr/bin/klist
+      delegate_to: localhost
       register: kerberos_ticket
       changed_when: false
 
