@@ -4,6 +4,42 @@
   gather_facts: false
 
   tasks:
+    - name: Validate Kerberos variables
+      ansible.builtin.assert:
+        that:
+          - ansible_user is defined
+          - ansible_user | length > 0
+          - ansible_password is defined
+          - ansible_password | length > 0
+          - ansible_winrm_transport is defined
+          - ansible_winrm_transport == "kerberos"
+        fail_msg: Missing ansible_user, ansible_password, or Kerberos transport
+
+    - name: Show Kerberos non-secret variables
+      ansible.builtin.debug:
+        msg:
+          ansible_user: "{{ ansible_user }}"
+          ansible_host: "{{ ansible_host }}"
+          ansible_winrm_transport: "{{ ansible_winrm_transport }}"
+
+    - name: Validate kinit with injected AAP credential
+      ansible.builtin.expect:
+        command: /usr/bin/kinit -V "{{ ansible_user }}"
+        responses:
+          (?i)password.*: "{{ ansible_password }}"
+        timeout: 60
+      no_log: true
+      changed_when: false
+
+    - name: Show Kerberos ticket
+      ansible.builtin.command: /usr/bin/klist
+      register: kerberos_ticket
+      changed_when: false
+
+    - name: Display Kerberos ticket summary
+      ansible.builtin.debug:
+        var: kerberos_ticket.stdout_lines
+
     - name: Wait for first Kerberos WinRM connection
       ansible.windows.win_shell: hostname
       register: kerberos_ready_1
