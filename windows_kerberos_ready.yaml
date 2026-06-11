@@ -3,6 +3,11 @@
   hosts: all
   gather_facts: false
 
+  vars:
+    kerberos_dns_retries: "{{ 45 if cloud_provider | default('') == 'aws' else 30 }}"
+    kerberos_dns_delay: 20
+    kerberos_winrm_timeout: "{{ 1200 if cloud_provider | default('') == 'aws' else 600 }}"
+
   tasks:
     - name: Set Kerberos password variable from available credential vars
       ansible.builtin.set_fact:
@@ -17,7 +22,9 @@
           - kerberos_password | length > 0
           - ansible_winrm_transport is defined
           - ansible_winrm_transport == "kerberos"
-        fail_msg: Missing ansible_user, password, or Kerberos transport
+          - ansible_host is defined
+          - ansible_host | length > 0
+        fail_msg: Missing ansible_user, password, ansible_host, or Kerberos transport
 
     - name: Show Kerberos non-secret variables
       ansible.builtin.debug:
@@ -26,14 +33,29 @@
           ansible_host: "{{ ansible_host }}"
           ansible_connection: "{{ ansible_connection | default('undefined') }}"
           ansible_winrm_transport: "{{ ansible_winrm_transport }}"
+          ansible_winrm_kinit_mode: "{{ ansible_winrm_kinit_mode | default('undefined') }}"
           ansible_password_defined: "{{ ansible_password is defined }}"
           ansible_ssh_pass_defined: "{{ ansible_ssh_pass is defined }}"
+
+    - name: Wait for DNS record to resolve from execution node
+      ansible.builtin.command: "getent hosts {{ ansible_host }}"
+      delegate_to: localhost
+      register: dns_lookup
+      retries: "{{ kerberos_dns_retries | int }}"
+      delay: "{{ kerberos_dns_delay }}"
+      until: dns_lookup.rc == 0
+      changed_when: false
 
     - name: Validate kinit with injected AAP credential
       ansible.builtin.shell: |
         printf '%s\n' "{{ kerberos_password }}" | /usr/bin/kinit -V "{{ ansible_user }}"
       delegate_to: localhost
+      register: kinit_result
+      retries: 5
+      delay: 15
+      until: kinit_result.rc == 0
       changed_when: false
+      no_log: true
 
     - name: Show Kerberos ticket
       ansible.builtin.command: /usr/bin/klist
@@ -45,11 +67,16 @@
       ansible.builtin.debug:
         var: kerberos_ticket.stdout_lines
 
-    - name: Wait for first Kerberos WinRM connection
+    - name: Wait for Kerberos WinRM transport to become available
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: "{{ kerberos_winrm_timeout | int }}"
+
+    - name: Validate first Kerberos WinRM command
       ansible.windows.win_shell: hostname
       register: kerberos_ready_1
       retries: 30
-      delay: 10
+      delay: 20
       until: kerberos_ready_1 is succeeded
       changed_when: false
 
@@ -58,13 +85,13 @@
 
     - name: Wait before second Kerberos validation
       ansible.builtin.pause:
-        seconds: 15
+        seconds: 30
 
-    - name: Validate second Kerberos WinRM connection
+    - name: Validate second Kerberos WinRM command
       ansible.windows.win_shell: hostname
       register: kerberos_ready_2
-      retries: 12
-      delay: 10
+      retries: 18
+      delay: 20
       until: kerberos_ready_2 is succeeded
       changed_when: false
 
@@ -73,12 +100,12 @@
 
     - name: Wait before final Kerberos validation
       ansible.builtin.pause:
-        seconds: 15
+        seconds: 30
 
-    - name: Validate final Kerberos WinRM connection
+    - name: Validate final Kerberos WinRM command
       ansible.windows.win_shell: hostname
       register: kerberos_ready_3
-      retries: 12
-      delay: 10
+      retries: 18
+      delay: 20
       until: kerberos_ready_3 is succeeded
       changed_when: false
